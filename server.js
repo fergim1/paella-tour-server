@@ -55,7 +55,7 @@ app.post("/create-checkout-session", async (req, res) => {
             quantity: quantity,
             adjustable_quantity: {enabled: true}
         },],
-        success_url:  `${process.env.CLIENT_URL}/success` ,
+        success_url:  `${process.env.CLIENT_URL}/#/success` ,
         cancel_url: process.env.CLIENT_URL ,
         payment_intent_data: {metadata: { time, date, phone }},
         // custom_text: {
