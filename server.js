@@ -26,46 +26,63 @@ app.use(cors({
 
 const stripe = require("stripe")(process.env.STRIPE_PRIVATE_KEY)
 
-///////////////   ITEM OF PAELLA TOUR  /////////////
+///////////////   PRICES OF PAELLA TOUR  /////////////
 const storeItems = new Map([
-    [1, { priceInCents: 8000, name: "Paella Tour" }],
+    [1, { priceInCents: 8000, name: "Paella Tour - Adult" }],
+    [2, { priceInCents: 4000, name: "Paella Tour - Child" }],
 ])
 
-
 app.post("/create-checkout-session", async (req, res) => {
-    const { id, date, time, quantity, phone } = req.body
-    console.log(req.body)
-    try {
-      const storeItem = storeItems.get(id)
-      const session = await stripe.checkout.sessions.create({
-        // payment_method_types: ["card"],
-        mode: "payment",
-        metadata: { time, date, phone },
-        line_items: [{
+  const { date, time, adults, children, phone  } = req.body
+  console.log(req.body)
+  try {
+    const itemAdult = storeItems.get(1)
+    const itemChild = storeItems.get(2)
+    const session = await stripe.checkout.sessions.create({
+      // payment_method_types: ["card"],
+      mode: "payment",
+      metadata: { time, date, phone },
+      line_items: [
+          {
             price_data: {
                   currency: "eur",
                   product_data: {
-                      name: storeItem.name,
+                      name: itemAdult.name,
                       // image: [newImage],
                       // metadata: { time, date, phone },
                   },
-                  unit_amount: storeItem.priceInCents,
+                  unit_amount: itemAdult.priceInCents,
                   tax_behavior: "inclusive",
             },
-            quantity: quantity,
+            quantity: adults,
             adjustable_quantity: {enabled: true}
-        },],
-        success_url:  `${process.env.CLIENT_URL}/#/success` ,
-        cancel_url: process.env.CLIENT_URL ,
-        payment_intent_data: {metadata: { time, date, phone }},
-        // custom_text: {
-        //   submit: {message: "We'll email you instructions on how to get started."},
-        // },
+          },
+          {
+            price_data: {
+                  currency: "eur",
+                  product_data: {
+                      name: itemChild.name,
+                      // image: [newImage],
+                      // metadata: { time, date, phone },
+                  },
+                  unit_amount: itemChild.priceInCents,
+                  tax_behavior: "inclusive",
+            },
+            quantity: children,
+            adjustable_quantity: {enabled: true}
+          },
+      ],
+      success_url:  `${process.env.CLIENT_URL}/#/success` ,
+      cancel_url: process.env.CLIENT_URL ,
+      payment_intent_data: {metadata: { time, date, phone }},
+      // custom_text: {
+      //   submit: {message: "We'll email you instructions on how to get started."},
+      // },
 })
-    res.json({ url: session.url })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
+  res.json({ url: session.url })
+} catch (e) {
+  res.status(500).json({ error: e.message })
+}
 })
 
 
@@ -100,6 +117,8 @@ app.post('/webhook', express.raw({type: 'application/json'}), async (request, re
       const paymentIntent = await stripe.paymentIntents.retrieve(
         event.data.object.payment_intent
       );
+      console.log('😀😀😀😀😀 paymentIntent')
+      console.log(paymentIntent)
 
       const session = await stripe.checkout.sessions.retrieve(
         event.data.object.id,
@@ -110,12 +129,13 @@ app.post('/webhook', express.raw({type: 'application/json'}), async (request, re
       const name = session.customer_details.name
       const country = session.customer_details.address.country
       const phone = session.metadata.phone
-      const description = session.line_items.data[0].description
       const date = session.metadata.date
       const time = session.metadata.time
-      const price = `€ ${session.line_items.data[0].price.unit_amount/100}`
-      const quantity = session.line_items.data[0].quantity
-      const amunt_total = `€ ${session.line_items.data[0].amount_total/100}`
+      const adultPrice = `€ ${session.line_items.data[0].price.unit_amount/100}`
+      const childPrice = `€ ${session.line_items.data[1].price.unit_amount/100}`
+      const adultQuantity = session.line_items.data[0].quantity
+      const childQuantity = session.line_items.data[1].quantity
+      const amount_received = `€ ${paymentIntent.amount_received/100}`
       const payment_status = paymentIntent.status
       const payment_intent = paymentIntent.id
       const client_secret = paymentIntent.client_secret
@@ -136,12 +156,11 @@ app.post('/webhook', express.raw({type: 'application/json'}), async (request, re
       <li><b>Email: </b>${email}</li>
       <li><b>Country: </b>${country}</li>
       <li><b>Phone: </b>${phone}</li>
-      <li><b>Description: </b>${description}</li>
       <li><b>Date: </b>${date}</li>
       <li><b>Time: </b>${time}</li>
-      <li><b>Price: </b>${price}</li>
-      <li><b>Quantity: </b>${quantity}</li>
-      <li><b>Amunt Total: </b>${amunt_total}</li>
+      <li><b>Adults: </b>${adultQuantity} (${adultPrice}/each)</li>
+      <li><b>Children: </b>${childQuantity} (${childPrice}/each)</li>
+      <li><b>Amunt Total: </b>${amount_received}</li>
       <li><b>Payment Status: </b>${payment_status}</li>
       <li><b>Payment Intent: </b>${payment_intent}</li>
       <li><b>Payment Method Types: </b>${payment_method_types}</li>
@@ -261,7 +280,7 @@ app.post('/webhook', express.raw({type: 'application/json'}), async (request, re
 //////////////////////////////////
 
 
-    // ... handle other event types
+// ... handle other event types
     default:
       console.log(`Unhandled event type ${event.type}`);
   }
@@ -271,7 +290,7 @@ app.post('/webhook', express.raw({type: 'application/json'}), async (request, re
 
 
 app.post("/contact", async (request, response)=>{
-  const {name, email, message} =  request.body
+  const {name, email, mobile, message} =  request.body
   try {
     await transporter.sendMail({
       from: '"Paella Tour" <paellatour.es@gmail.com>',
@@ -281,6 +300,8 @@ app.post("/contact", async (request, response)=>{
       <h2>- CONTACT -</h2>
       <ul>
         <li><b>Name: </b>${name}</li>
+        <li><b>Email: </b>${email}</li>
+        <li><b>Mobile: </b>${mobile}</li>
         <li><b>Message: </b>${message}</li>
       </ul>
       `,
@@ -292,7 +313,7 @@ app.post("/contact", async (request, response)=>{
 
 
 app.post("/private-tour", async (request, response)=>{
-  const {name, email, message} =  request.body
+  const {name, email, mobile, message} =  request.body
   try {
     await transporter.sendMail({
       from: '"Paella Tour" <paellatour.es@gmail.com>',
@@ -302,6 +323,8 @@ app.post("/private-tour", async (request, response)=>{
       <h2>- PRIVATE TOUR -</h2>
       <ul>
         <li><b>Name: </b>${name}</li>
+        <li><b>Email: </b>${email}</li>
+        <li><b>Mobile: </b>${mobile}</li>
         <li><b>Message: </b>${message}</li>
       </ul>
       `,
